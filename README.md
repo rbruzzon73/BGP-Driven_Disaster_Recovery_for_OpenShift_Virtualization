@@ -2,38 +2,43 @@
 
 ## MetalLB Layer 3 (BGP) as a foundational component for Disaster Recovery strategies in OpenShift Virtualization
 
-- The BGP-driven Disaster Recovery architecture utilizes MetalLB in Layer 3 (BGP) mode as a foundational component.\
+- The BGP-driven Disaster Recovery architecture utilizes MetalLB in Layer 3 (BGP) mode as a foundational component.
 This approach leverages the reconvergence capabilities of the network infrastructure Control Plane, where the BGP protocol of the MetalLB in Layer 3 is enabled (Figure 1).
 
-- MetalLB in Layer 3 mode (BGP mode) within an OpenShift Virtualization Cluster enables the allocation of External IP addresses for OpenShift Load Balancer services connected to virtual machines (service's  endpoints).\
+- MetalLB in Layer 3 mode (BGP mode) within an OpenShift Virtualization Cluster enables the allocation of External IP addresses for OpenShift Load Balancer services connected to virtual machines (service's  endpoints).
 
-- MetalLB advertises external IP addresses as Network Layer Reachability Information (NLRI composed by Network Prefix and Network Length) to the network's control plane via BGP.\
-This feature facilitates the deployment of scalable, highly available network services, including those based on dual-stack (IPv4 and IPv6)."\
+- MetalLB advertises external IP addresses as Network Layer Reachability Information (NLRI composed by Network Prefix and Network Length) to the network's control plane via BGP.
+This feature facilitates the deployment of scalable, highly available network services, including those based on dual-stack (IPv4 and IPv6)."
 
-- The implementation of a Disaster Recovery architecture based on MetalLB in Layer 3 mode (BGP mode) offers a cost-effective alternative to traditional hardware load balancing solutions.\
+- The implementation of a Disaster Recovery architecture based on MetalLB in Layer 3 mode (BGP mode) offers a cost-effective alternative to traditional hardware load balancing solutions.
 This approach leads to a significant reduction in the total cost of ownership of the infrastructure due to the following advantages:
 
-   - The external load balancer (LB) is no longer necessary in the Disaster Recovery setup based on the BGP-driven architecture (Figure 1).\
+   - The external load balancer (LB) is no longer necessary in the Disaster Recovery setup based on the BGP-driven architecture (Figure 1).
      This is because load balancing functionality is now managed by the OpenShift Load Balancer Services with external IP addresses, which are directly advertised through the BGP protocol of the MetalLB in Layer 3 mode.
 
-   - The DNS Global Load Balancer (DNS GLB) is no longer necessary for Disaster Recovery based on the BGP-driven architecture (Figure 1).\
+   - The DNS Global Load Balancer (DNS GLB) is no longer necessary for Disaster Recovery based on the BGP-driven architecture (Figure 1).
      In this scenario,  the reachability of External IP addresses associated with the OpenShift Load Balancer Service is maintained through the reconvergence capabilities of the Network Control Plane. 
 
 - The adoption of a Network Topology where the External IP Addresses assigned to the LoadBalancer Services and learned from the External BGP routers are redistributed, towards an Interior Gateway Protocol (OSPF in Figure 1), eliminates the complexities associated with the full mesh requirement of the iBGP protocol.
+  
+   *Figure 1 - Modernizing Disaster Recovery: from traditional Hardware Load Balancers to an Integrated, BGP-Driven Architecture.*
+   <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure1-Modernizing_Disaster_Recovery.jpg" width="100%" height="100%">
 
-*Figure 1 - Modernizing Disaster Recovery: from traditional Hardware Load Balancers to an Integrated, BGP-Driven Architecture.*
 
-***
+   ***
 
-Note:\
-DNS GLB will remain relevant in Business Continuity architectures that require an RTO (Total Downtime) of zero.\
-In such cases, different sets of IP Address Pools  are assigned to the MetalLB of the OpenShift Virtualization Clusters to grant the scenarios where the VMs operate in an active-active mode (Figure 2).\
+   **Note:** <br>
+   DNS GLB will remain relevant in Business Continuity architectures that require an RTO (Total Downtime) of zero.
+   In such cases, different sets of IP Address Pools  are assigned to the MetalLB of the OpenShift Virtualization Clusters to grant the scenarios where the VMs operate in an active-active mode (Figure 2).
 
-***
+   *Figure 2 - Modernizing Business Continuity: from traditional Hardware Load Balancers to an Integrated, BGP-Driven Architecture.*
+   <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure2-Modernizing_Business_Continuity.jpg" width="100%" height="100%">
 
-- The MetalLB architecture in Layer 3 (BGP mode) relies on the FRR (FRRouting) suite to instantiate the BGP Speaker PODs in the designated nodes within Red Hat OpenShift Virtualization.\
+    ***
 
-- The objective of the MetalLB BGP Speakers is to advertise, to the external iBGP or eBGP peers (iBGP in this Proof Of Concept), the Network Layer Reachability Information (NLRI) related to the External IP addresses assigned to the LoadBalancer services
+- The MetalLB architecture in Layer 3 (BGP mode) relies on the FRR (FRRouting) suite to instantiate the BGP Speaker PODs in the designated nodes within Red Hat OpenShift Virtualization.
+
+- The objective of the MetalLB BGP Speakers is to advertise, to the external iBGP or eBGP peers (iBGP in this Proof Of Concept), the Network Layer Reachability Information (NLRI) related to the External IP addresses assigned to the LoadBalancer services.
 
 *<p align="right"> Figure 3- BGP Equal-Cost Multi-Path (ECMP) </p>*
 <img align="right" width="300" height="500" src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure3-BGP_Equal_Cost_Multi-Paty-ECMP.jpg">
@@ -53,16 +58,19 @@ Additionally, the reconvergence capabilities of routing protocols contribute sig
 <br>
 <br>
 
-- Bidirectional Forward Detection (BFD) plays a vital role in BGP performance by reducing the time required to detect network failures.\
+- Bidirectional Forward Detection (BFD) plays a vital role in BGP performance by reducing the time required to detect network failures.
 BFD can identify failures within milliseconds, offering a substantial improvement over the standard keepalive timeout recommendations of 20 seconds specified in RFC 4271, with some third-party providers adopting longer timeouts such as 60 seconds.
 
-- The default configuration of the MetalLB BGP Speaker is to deny any Network Layer Reachability Information (NLRI) advertised by the BGP peers (external routers).\
+- The default configuration of the MetalLB BGP Speaker is to deny any Network Layer Reachability Information (NLRI) advertised by the BGP peers (external routers).
 This posture presents a technical challenge regarding how to enable connectivity from internal endpoints behind the LoadBalancer services to remote subnets that are not directly connected to the Red Hat OpenShift Virtualization worker nodes.
 
-- The Network Address Translation (NAT) process implemented on the external router connected to the worker nodes of OpenShift Virtualization is one of the possible approaches for managing this type of network complexity (Figure 4) connected to the traditional Kubernetes networking where the MetalLB architecture in Layer 3 (BGP mode) speaker are involved.\
-An alternative approach for managing this complexity is available in this Red Hat blog post: [Learning Kubernetes nodes networking routes via BGP](https://www.redhat.com/en/blog/learning-kubernetes-nodes-networking-routes-via-bgp).\
+- The Network Address Translation (NAT) process implemented on the external router connected to the worker nodes of OpenShift Virtualization is one of the possible approaches for managing this type of network complexity (Figure 4) connected to the traditional Kubernetes networking where the MetalLB architecture in Layer 3 (BGP mode) speaker are involved.
+An alternative approach for managing this complexity is available in this Red Hat blog post: [Learning Kubernetes nodes networking routes via BGP](https://www.redhat.com/en/blog/learning-kubernetes-nodes-networking-routes-via-bgp).
 
 - Implementing user-defined networks (UDNs) in Red Hat OpenShift Virtualization using Virtual Routing and Forwarding (VRF), advertising them via BGP with FRRouting speakers, and injecting learned BGP prefixes back into the VRF creates an adaptable solution that makes entire user-defined networks (UDNs) prefixes, not just LoadBalancer service IPs, directly reachable from the customers network infrastructure This topic, related to user-defined networks (UDNs) exposed via BGP routing protocol, is extensively discussed in this article: [Exposing OpenShift networks using BGP](https://developers.redhat.com/articles/2025/10/23/exposing-openshift-networks-using-bgp#the_benefits_of_bgp_for_openshift_networking)
+
+Figure 4 - Implementation of Network Address Translation to facilitate connectivity to remote subnets.
+<img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure4-Implementation_of_Network_Address_Translation.jpg" width="100%" height="100%">
 
 
 ## Administration of the MetalLB IPAddressPools and External IP Address advertisement via BGP.
