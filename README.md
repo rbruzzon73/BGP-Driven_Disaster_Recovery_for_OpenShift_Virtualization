@@ -356,7 +356,7 @@ To establish sessions with multiple external routers, it is necessary to define 
   ~~~
 
   *Figure 8 - S3 Infrastructure to support Virtual Machine Backup & Restore via OpenShift APIs for Data Protection (OADP)*
-  <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure8-S3_infrastructure.jpg" width="70%" height="70%">
+  <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure8-S3_infrastructure.jpg" width="50%" height="50%">
 
 <br>
 
@@ -381,7 +381,7 @@ To establish sessions with multiple external routers, it is necessary to define 
 - The external IP address of the virtual machine rhel8-server will be accessible again once the restoration procedures are completed and the OSPF and BGP protocols have reconverged to direct traffic to the DR OpenShift Virtualization cluster.
 
   *Figure 9 - Virtual Machine fail over on DR OpenShift Virtualization Cluster*
-  <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure9-Virtual_Machine_fail_over_on_DR.jpg" width="70%" height="70%">  
+  <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure9-Virtual_Machine_fail_over_on_DR.jpg" width="100%" height="100%">  
 
 <br>
 
