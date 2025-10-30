@@ -202,14 +202,129 @@ To establish sessions with multiple external routers, it is necessary to define 
 
 
 - Based on the MetalLB configuration implemented during the initial setup of the primary OpenShift Virtualization cluster (please refer to the supplemental configuration details provided at the end of this document), the BGP speakers are running on the worker nodes:
+  
+  ~~~
+  [root@hub-ocp-bastion-server ~]# oc get nodes -l app=metallb-worker
+  NAME                             STATUS   ROLES               AGE   VERSION
+  hub-worker01.ocp4-hub.test.com   Ready    BGPspeaker,worker   29d   v1.32.8
+  hub-worker02.ocp4-hub.test.com   Ready    BGPspeaker,worker   29d   v1.32.8
+
+  [root@hub-ocp-bastion-server ~]# oc get pods -o wide | grep -E 'worker01|worker02' | sort -k 7
+  frr-k8s-zmqsf                            7/7     Running   0               7m34s   192.168.100.21   hub-worker01.ocp4-hub.test.com   <none>           <none>
+  frr-k8s-9jzl9                            7/7     Running   0               7m34s   192.168.100.22   hub-worker02.ocp4-hub.test.com   <none>           <none>
+  ~~~
 
 - Both MalLB BGP speaker are advertising the 192.11.1.100/32 External IP address as Network Layer Reachability Information (NLRI) to the rtr-frr01-hub, as demonstrated in the details below related to the BGP speaker running on hub-worker01.ocp4-hub.test.com:
 
-As a result of the Network Layer Reachability Information (NLRI) associated with the external IP address 192.11.1.100/32, which is advertised by the MetalLB BGP speakers, the router rtr-frr01-hub (connected directly to the worker nodes of the Primary OpenShift Virtualization cluster) will recognize two equal-cost paths to reach the prefix 192.11.1.100/32:
+  ~~~
+  #------------------------------------ frr-k8s-zmqsf ------------------------------#
 
-The prefix 192.11.1.100/32, learned via iBGP, will be sequentially redistributed by the rtr-frr01-hub router into the OSPF routing protocol and advertised to the rtr-frr02-access as an External E2 route.
+  # BGP summary and routes advertised  
+  IPv4 Unicast Summary (VRF default):
+  BGP router identifier 192.168.100.21, local AS number 65008 vrf-id 0
+  BGP table version 1
+  RIB entries 1, using 192 bytes of memory
+  Peers 1, using 725 KiB of memory
+  Neighbor        V         AS   MsgRcvd   MsgSent   TblVer  InQ OutQ  Up/Down State/PfxRcd   PfxSnt Desc
+  192.100.1.254   4      65008      3994      3993        0    0    0 01:06:28            0        1 N/A
+  Total number of neighbors 1
 
-Performing a basic end-to-end test, “VM Client” acting as  application consumer connected to the rtr-frr03-access router was able to connect to the HTTP test service hosted on the virtual Machine rhel8-server, which is currently running on hub-worker01.ocp4-hub.test.com (a worker node within the Primary OpenShift Virtualization cluster).
+  # BGP advertised routes
+  BGP table version is 1, local router ID is 192.168.100.21, vrf id 0
+  Default local pref 100, local AS 65008
+  Status codes:  s suppressed, d damped, h history, * valid, > best, = multipath,
+                 i internal, r RIB-failure, S Stale, R Removed
+  Nexthop codes: @NNN nexthop's vrf id, < announce-nh-self
+  Origin codes:  i - IGP, e - EGP, ? - incomplete
+  RPKI validation codes: V valid, I invalid, N Not found
+      Network          Next Hop            Metric LocPrf Weight Path
+   *> 192.11.1.100/32  0.0.0.0                  0    100  32768 i
+  Total number of prefixes 1
+
+  # Route-map with OUT direction (to the external router)
+  ip address prefix-list 192.100.1.254-pl-ipv4
+     seq 1 permit 192.11.1.100/32
+  # Route-map with IN direction (from the external router)
+  ip address prefix-list 192.100.1.254-inpl-ipv4
+     seq 1 deny any
+  ~~~
+
+- As a result of the Network Layer Reachability Information (NLRI) associated with the external IP address 192.11.1.100/32, which is advertised by the MetalLB BGP speakers, the router rtr-frr01-hub (connected directly to the worker nodes of the Primary OpenShift Virtualization cluster) will recognize two equal-cost paths to reach the prefix 192.11.1.100/32:
+
+  ~~~
+  rtr-frr01-hub# show ip route bgp
+  Codes: K - kernel route, C - connected, L - local, S - static,
+         R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,
+         T - Table, A - Babel, F - PBR, f - OpenFabric,
+         t - Table-Direct,
+         > - selected route, * - FIB route, q - queued, r - rejected, b - backup
+         t - trapped, o - offload failure
+  
+  IPv4 unicast VRF default:
+  B>  192.11.1.100/32 [200/0] via 192.100.1.221 (recursive), weight 1, 01:21:15
+    *                           via 192.100.1.221, eth1 onlink, weight 1, 01:21:15
+                                via 192.100.1.222 (recursive), weight 1, 01:21:15
+    *                           via 192.100.1.222, eth1 onlink, weight 1, 01:21:15
+  ~~~
+
+- The prefix 192.11.1.100/32, learned via iBGP, will be sequentially redistributed by the rtr-frr01-hub router into the OSPF routing protocol and advertised to the rtr-frr02-access as an External E2 route.
+
+  ~~~
+  rtr-frr02-access# show ip ospf database external             
+         OSPF Router with ID (99.100.2.2)
+                  AS External Link States 
+
+    LS age: 153
+    Options: 0x2  : *|-|-|-|-|-|E|-
+    LS Flags: 0x6  
+    LS Type: AS-external-LSA
+    Link State ID: 192.11.1.100 (External Network Number)
+    Advertising Router: 99.100.1.1
+    LS Seq Number: 80000001
+    Checksum: 0xe3db
+    Length: 36
+  
+    Network Mask: /32
+          Metric Type: 2 (Larger than any link state path)
+          TOS: 0
+          Metric: 20
+          Forward Address: 192.100.1.221
+          External Route Tag: 0
+  ~~~
+
+  ~~~
+  rtr-frr02-access# show ip route ospf             
+  Codes: K - kernel route, C - connected, L - local, S - static,
+         R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,
+         T - Table, A - Babel, F - PBR, f - OpenFabric,
+         t - Table-Direct,
+         > - selected route, * - FIB route, q - queued, r - rejected, b - backup
+         t - trapped, o - offload failure
+
+  IPv4 unicast VRF default:
+  O>* 192.11.1.100/32 [110/20] via 199.10.1.254, eth0, weight 1, 00:02:49
+  O>* 192.100.1.0/24 [110/20] via 199.10.1.254, eth0, weight 1, 00:12:08
+  O   192.111.100.0/24 [110/10] is directly connected, eth2, weight 1, 00:12:55
+  O   192.168.150.0/24 [110/10] is directly connected, eth1, weight 1, 00:12:55
+  O>* 192.200.1.0/24 [110/20] via 199.10.1.252, eth0, weight 1, 00:12:08
+  O   199.10.1.0/24 [110/10] is directly connected, eth0, weight 1, 00:12:08
+  ~~~
+
+- Performing a basic end-to-end test, “VM Client” acting as  application consumer connected to the rtr-frr03-access router was able to connect to the HTTP test service hosted on the virtual Machine rhel8-server, which is currently running on hub-worker01.ocp4-hub.test.com (a worker node within the Primary OpenShift Virtualization cluster).
+
+  ~~~
+   [admin@vm-server ~]$ tracepath -m8 192.11.1.100
+   1?: [LOCALHOST]                      pmtu 1500
+   1:  rtr-frr02-access                                      0.448ms 
+   1:  rtr-frr02-access                                      0.240ms 
+   2:  rtr-frr01-hub                                         0.696ms 
+   3:  primary-ocp-worker02                                  1.214ms 
+         …. omitted …
+
+  [admin@vm-server ~]$ curl -Is http://192.11.1.100:22080 | head -n 1
+  HTTP/1.1 200 OK
+  [admin@vm-server ~]$ 
+  ~~~
 
 
 ### Disaster Recovery prerequisite:
