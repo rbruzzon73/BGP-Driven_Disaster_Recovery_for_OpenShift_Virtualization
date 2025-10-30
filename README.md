@@ -263,7 +263,7 @@ To establish sessions with multiple external routers, it is necessary to define 
   IPv4 unicast VRF default:
   B>  192.11.1.100/32 [200/0] via 192.100.1.221 (recursive), weight 1, 01:21:15
     *                           via 192.100.1.221, eth1 onlink, weight 1, 01:21:15
-                                via 192.100.1.222 (recursive), weight 1, 01:21:15
+                              via 192.100.1.222 (recursive), weight 1, 01:21:15
     *                           via 192.100.1.222, eth1 onlink, weight 1, 01:21:15
   ~~~
 
@@ -326,72 +326,221 @@ To establish sessions with multiple external routers, it is necessary to define 
   [admin@vm-server ~]$ 
   ~~~
 
+<br>
 
 ### Disaster Recovery prerequisite:
 
-The availability of the latest full backup, or point-in-time (PIT) backups if applicable, of the virtual machine resources associated with rhel8-server stored externally from the primary OpenShift Virtualization cluster, along with the ability to restore these resources in the disaster recovery (DR) OpenShift Virtualization environment, is a prerequisite for this demonstration, as illustrated in Figure 8. 
+- The availability of the latest full backup, or point-in-time (PIT) backups if applicable, of the virtual machine resources associated with rhel8-server stored externally from the primary OpenShift Virtualization cluster, along with the ability to restore these resources in the disaster recovery (DR) OpenShift Virtualization environment, is a prerequisite for this demonstration, as illustrated in Figure 8. 
 
-In this context, OpenShift-ADP was utilized to create a full backup of the rhel8-server virtual machine from the primary OpenShift Virtualization cluster and to restore it within the DR OpenShift Virtualization environment during the recovery process described below.
+- In this context, OpenShift-ADP was utilized to create a full backup of the rhel8-server virtual machine from the primary OpenShift Virtualization cluster and to restore it within the DR OpenShift Virtualization environment during the recovery process described below.
 
-\
-\
-\
-\
+  ~~~
+  # cat backup-vm-bgp-datamover.yaml 
+  apiVersion: velero.io/v1
+  kind: Backup
+  metadata:
+    name: vm-gvp-namespace-backup
+    namespace: openshift-adp
+  spec:
+    snapshotMoveData: true
+    includedNamespaces:
+      - vm-bgp
+    storageLocation: dpa-ocp-virt-1
 
+  [root@hub-ocp-bastion-server ocp-script-yaml-dr]# oc create -f backup-vm-bgp-datamover.yaml
+  backup.velero.io/vm-gvp-namespace-backup created
+  
+  [root@hub-ocp-bastion-server ~]# velero backup get -n openshift-adp
+  NAME                      STATUS      ERRORS   WARNINGS   CREATED                         EXPIRES   STORAGE LOCATION   SELECTOR
+  vm-gvp-namespace-backup   Completed   0        0          2025-10-25 04:04:29 -0400 EDT   29d       dpa-ocp-virt-1     <none>
+  ~~~
 
+  *Figure 8 - S3 Infrastructure to support Virtual Machine Backup & Restore via OpenShift APIs for Data Protection (OADP)*
+  <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure8-S3_infrastructure.jpg" width="70%" height="70%">
+
+<br>
 
 ### Primary cluster isolation:
 
-After isolating the Primary OpenShift Virtualization environment (which involved disabling the external router interface, as indicated in Figure 9), the VM client experiences a loss of connectivity towards the external IP address of the virtual machine rhel8-server.
+- After isolating the Primary OpenShift Virtualization environment (which involved disabling the external router interface, as indicated in Figure 9), the VM client experiences a loss of connectivity towards the external IP address of the virtual machine rhel8-server.
 
-The external IP address of the virtual machine rhel8-server will be accessible again once the restoration procedures are completed and the OSPF and BGP protocols have reconverged to direct traffic to the DR OpenShift Virtualization cluster.
+  ~~~
+  [admin@vm-server ~]$ tracepath -m8 192.11.1.100
+  1?: [LOCALHOST]                      pmtu 1500
+  1:  rtr-frr02-access                                      0.527ms 
+  1:  rtr-frr02-access                                      0.352ms 
+  2:  no reply
+  3:  no reply
+  4:  no reply
+  5:  no reply
+  6:  no reply
+  7:  no reply
+  8:  no reply
+  ~~~
 
-\
-\
-\
-\
+- The external IP address of the virtual machine rhel8-server will be accessible again once the restoration procedures are completed and the OSPF and BGP protocols have reconverged to direct traffic to the DR OpenShift Virtualization cluster.
 
+  *Figure 9 - Virtual Machine fail over on DR OpenShift Virtualization Cluster*
+  <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure9-Virtual_Machine_fail_over_on_DR.jpg" width="70%" height="70%">  
 
-\
-
-
+<br>
 
 ### Restore process on DR cluster
 
-Following the completion of the restore process on the DR OpenShift Virtualization cluster, the virtual machine rhel8-server has been successfully restored and reassigned to the same external IP address previously utilized in the primary cluster:
+- Following the completion of the restore process on the DR OpenShift Virtualization cluster, the virtual machine rhel8-server has been successfully restored and reassigned to the same external IP address previously utilized in the primary cluster:
 
+  ~~~
+  # cat restore-vm-bgp-datamover.yaml 
+  apiVersion: velero.io/v1
+  kind: Restore
+  metadata:
+    name: vm-gvp-namespace-restore
+    namespace: openshift-adp
+  spec:
+    backupName: vm-gvp-namespace-backup
+    restorePVs: true
+
+  [root@dr-ocp-bastion-server ~]# oc create -f restore-vm-bgp-datamover.yaml
+  restore.velero.io/vm-gvp-namespace-restore created
+  ~~~
+
+  ~~~
+  [root@dr-ocp-bastion-server ~]# velero get restores -n openshift-adp
+  NAME                       BACKUP                    STATUS      STARTED                         COMPLETED                       ERRORS   WARNINGS   CREATED                         SELECTOR
+  vm-gvp-namespace-restore   vm-gvp-namespace-backup   Completed   2025-10-25 05:06:14 -0400 EDT   2025-10-25 05:13:23 -0400 EDT   0        15         2025-10-25 05:06:14 -0400 EDT   <none>
+  ~~~
+
+  ~~~
+  [root@dr-ocp-bastion-server ~]# oc project vm-bgp
+  Now using project "vm-bgp" on server "https://api.ocp4-dr.test.com:6443".
+  [root@dr-ocp-bastion-server ~]# oc get vm
+  NAME           AGE    STATUS    READY
+  rhel8-server   8m5s   Running   True
+  
+  [root@dr-ocp-bastion-server ~]# oc get service
+  NAME                         TYPE           CLUSTER-IP       EXTERNAL-IP    PORT(S)                           AGE
+  headless                     ClusterIP      None             <none>         5434/TCP                          9m49s
+  rhel8-server-01-manual-svc   LoadBalancer   172.31.111.216   192.11.1.100   22000:31214/TCP,22080:31217/TCP   9m49s
+  ~~~
+
+  
+
+<br>
 
 ### External IP address reachability restored
 
-Restoring the virtual machine objects in the Disaster Recovery OpenShift Virtualization cluster, the External IP Address 192.11.1.100/32 is now being re-advertised, this time towards rtr-frr03-dr (the router connected to the DR OpenShift Virtualization cluster).
+- Restoring the virtual machine objects in the Disaster Recovery OpenShift Virtualization cluster, the External IP Address 192.11.1.100/32 is now being re-advertised, this time towards rtr-frr03-dr (the router connected to the DR OpenShift Virtualization cluster).
 
-The topology modification resulting from the restoration of virtual machine objects within the DR OpenShift Virtualization cluster has caused reconvergence of the OSPF instance operating on rtr-frr02-access.\
+  ~~~
+  rtr-frr03-dr# show ip bgp sum
+
+  IPv4 Unicast Summary:
+  BGP router identifier 99.100.3.3, local AS number 65008 VRF default vrf-id 0
+  BGP table version 4
+  RIB entries 5, using 640 bytes of memory
+  Peers 2, using 47 KiB of memory
+  Peer groups 1, using 64 bytes of memory
+  
+  Neighbor        V         AS   MsgRcvd   MsgSent   TblVer  InQ OutQ  Up/Down State/PfxRcd   PfxSnt Desc
+  192.200.1.221   4      65008      5907      5908        4    0    0 01:38:22            1        2 N/A
+  192.200.1.222   4      65008      5912      5915        4    0    0 01:38:17            1        2 N/A
+  
+  Total number of neighbors 2 
+  ~~~
+
+  ~~~
+  rtr-frr03-dr# show ip route bgp
+  Codes: K - kernel route, C - connected, L - local, S - static,
+         R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,
+         T - Table, A - Babel, F - PBR, f - OpenFabric,
+         t - Table-Direct,
+         > - selected route, * - FIB route, q - queued, r - rejected, b - backup
+         t - trapped, o - offload failure
+
+  IPv4 unicast VRF default:
+  B>  192.11.1.100/32 [200/0] via 192.200.1.221 (recursive), weight 1, 00:07:27
+    *                           via 192.200.1.221, eth1 onlink, weight 1, 00:07:27
+                              via 192.200.1.222 (recursive), weight 1, 00:07:27
+    *                           via 192.200.1.222, eth1 onlink, weight 1, 00:07:27
+  ~~~
+
+- The topology modification resulting from the restoration of virtual machine objects within the DR OpenShift Virtualization cluster has caused reconvergence of the OSPF instance operating on rtr-frr02-access.\
 The External IP Address is now accessible via the rtr-frr03-dr router connected to the DR OpenShift Virtualization cluster.
 
-\
+  ~~~
+  rtr-frr02-access# show ip ospf database external 
+       OSPF Router with ID (99.100.2.2)
+                AS External Link States 
+
+  LS age: 27
+  Options: 0x2  : *|-|-|-|-|-|E|-
+  LS Flags: 0x6  
+  LS Type: AS-external-LSA
+  Link State ID: 192.11.1.100 (External Network Number)
+  Advertising Router: 99.100.3.3
+  LS Seq Number: 80000002
+  Checksum: 0x7cd9
+  Length: 36
+
+  Network Mask: /32
+        Metric Type: 2 (Larger than any link state path)
+        TOS: 0
+        Metric: 20
+        Forward Address: 192.200.1.221
+        External Route Tag: 0
+  ~~~
+
+  ~~~
+  rtr-frr02-access# show ip route ospf
+  Codes: K - kernel route, C - connected, L - local, S - static,
+         R - RIP, O - OSPF, I - IS-IS, B - BGP, E - EIGRP, N - NHRP,
+         T - Table, A - Babel, F - PBR, f - OpenFabric,
+         t - Table-Direct,
+         > - selected route, * - FIB route, q - queued, r - rejected, b - backup
+         t - trapped, o - offload failure
+  
+  IPv4 unicast VRF default:
+  O>* 192.11.1.100/32 [110/20] via 199.10.1.252, eth0, weight 1, 00:00:30  
+  O>* 192.100.1.0/24 [110/20] via 199.10.1.254, eth0, weight 1, 00:16:59
+  O   192.111.100.0/24 [110/10] is directly connected, eth2, weight 1, 00:17:46
+  O   192.168.150.0/24 [110/10] is directly connected, eth1, weight 1, 00:17:46
+  O>* 192.200.1.0/24 [110/20] via 199.10.1.252, eth0, weight 1, 00:16:59
+  O   199.10.1.0/24 [110/10] is directly connected, eth0, weight 1, 00:16:59
+  rtr-frr02-access# 
+  ~~~
 
 
-After the network reconvergence and as the final outcome of the recovery process, the VM Client restores connectivity to the RHEL8 server operating on DR OpenShift Virtualization through the rtr-frr03-dr router (Figure 9):
+- After the network reconvergence and as the final outcome of the recovery process, the VM Client restores connectivity to the RHEL8 server operating on DR OpenShift Virtualization through the rtr-frr03-dr router (Figure 9):
 
-\
-\
-\
+  ~~~
+  [admin@vm-server ~]$ tracepath -m8 192.11.1.100
+  1?: [LOCALHOST]                      pmtu 1500
+  1:  rtr-frr02-access                                      0.347ms 
+  1:  rtr-frr02-access                                      0.216ms 
+  2:  rtr-frr03-dr                                          0.709ms 
+  3:  dr-ocp-worker02                                       1.088ms 
+        … omitted …
 
+  [admin@vm-server ~]$ curl -Is http://192.11.1.100:22080 | head -n 1
+  HTTP/1.1 200 OK
+  [admin@vm-server ~]$ 
+  ~~~
 
+<br>
 
 ## Addendum (version, notes and configuration details)
 
 |                                  |                                    |                         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| :------------------------------: | :--------------------------------: | :---------------------: | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+| :------------------------------ | :-------------------------------- | :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 |      Infrastructure Elements     |             Components             |         Version         |                                                                                                                                                                                                                                                                                                                                                                    Notes and Configuration Details (most relevant configuration files)                                                                                                                                                                                                                                                                                                                                                                    |
-| Primary OpenShift virtualization |      Red Hat OpenShift version     |           4.19          | # Global ipForwarding and routingViaHost enabled in Red Hat OpenShift Virtualization: oc patch network.operator cluster --type=merge -p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"ipForwarding": "Global"}}}}}' oc patch network.operator cluster --type=merge -p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"routingViaHost": true}}}}}' # labels assigned to the worker nodes for MetalLB:: oc label node hub-worker01.ocp4-hub.test.com app=metallb-worker oc label node hub-worker02.ocp4-hub.test.com app=metallb-worker # label assigned to the worker nodes for NMState: oc label node hub-worker01.ocp4-hub.test.com node-role.kubernetes.io/BGPspeaker="" oc label node hub-worker02.ocp4-hub.test.com node-role.kubernetes.io/BGPspeaker="" |
+| Primary OpenShift virtualization |      Red Hat OpenShift version     |           4.19          | # Global ipForwarding and routingViaHost enabled in Red Hat OpenShift Virtualization: <br> oc patch network.operator cluster --type=merge -p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"ipForwarding": "Global"}}}}}' <br> oc patch network.operator cluster --type=merge -p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"routingViaHost": true}}}}}' <br> <br> # labels assigned to the worker nodes for MetalLB:: <br> oc label node hub-worker01.ocp4-hub.test.com app=metallb-worker <br> oc label node hub-worker02.ocp4-hub.test.com app=metallb-worker <br> <br> # label assigned to the worker nodes for NMState: <br> oc label node hub-worker01.ocp4-hub.test.com node-role.kubernetes.io/BGPspeaker="" <br> oc label node hub-worker02.ocp4-hub.test.com node-role.kubernetes.io/BGPspeaker="" <br> <br> # External IP address assignment to noobaa-mgmt / s3 disabled: <br> https://access.redhat.com/solutions/6995857 |
 |                                  |        LocalStorage operator       |           4.19          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 |                                  | OpenShift Data Foundation operator |           4.19          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 |                                  |  OpenShift Virtualization operator |           4.19          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 |                                  |            OADP Operator           |          1.5.2          |                                                                                                                                                                                                                                                                                                                                       [bgp-driven\_dr\_for\_ocp\_virt-ocp\_hub\_oadp.git](https://github.com/rbruzzon73/bgp-driven_dr_for_ocp_virt-ocp_hub_oadp.git)                                                                                                                                                                                                                                                                                                                                      |
 |                                  |    Kubernetes NMSstate Operator    |           4.19          |                                                                                                                                                                                                                                                                                                                                   [bgp-driven\_dr\_for\_ocp\_virt-ocp\_hub\_nmstate.git ](https://github.com/rbruzzon73/bgp-driven_dr_for_ocp_virt-ocp_hub_nmstate.git)                                                                                                                                                                                                                                                                                                                                   |
 |                                  |          MetalLB operator          |           4.19          |                                                                                                                                                                                                                                                                                                                                    [bgp-driven\_dr\_for\_ocp\_virt-ocp\_hub\_metallb.git](https://github.com/rbruzzon73/bgp-driven_dr_for_ocp_virt-ocp_hub_metallb.git)                                                                                                                                                                                                                                                                                                                                   |
-|    DR OpenShift virtualization   |      Red Hat OpenShift version     |           4.19          |     # Global ipForwarding and routingViaHost enabled in Red Hat OpenShift Virtualization: oc patch network.operator cluster --type=merge -p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"ipForwarding": "Global"}}}}}' oc patch network.operator cluster --type=merge -p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"routingViaHost": true}}}}}' # labels assigned to the worker nodes for MetalLB:: oc label node dr-worker01.ocp4-dr.test.com app=metallb-worker oc label node dr-worker02.ocp4-dr.test.com app=metallb-worker # label assigned to the worker nodes for NMState: oc label node dr-worker01.ocp4-dr.test.com node-role.kubernetes.io/BGPspeaker="" oc label node dr-worker02.ocp4-dr.test.com node-role.kubernetes.io/BGPspeaker=""     |
+|    DR OpenShift virtualization   |      Red Hat OpenShift version     |           4.19          |     # Global ipForwarding and routingViaHost enabled in Red Hat OpenShift Virtualization: <br> oc patch network.operator cluster --type=merge -p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"ipForwarding": "Global"}}}}}' <br> oc patch network.operator cluster --type=merge -p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"routingViaHost": true}}}}}' <br> <br> # labels assigned to the worker nodes for MetalLB: <br> oc label node dr-worker01.ocp4-dr.test.com app=metallb-worker <br> oc label node dr-worker02.ocp4-dr.test.com app=metallb-worker <br> <br> # label assigned to the worker nodes for NMState: <br> oc label node dr-worker01.ocp4-dr.test.com node-role.kubernetes.io/BGPspeaker="" <br> oc label node dr-worker02.ocp4-dr.test.com node-role.kubernetes.io/BGPspeaker="" <br> <br> # External IP address assignment to noobaa-mgmt / s3 disabled: <br> https://access.redhat.com/solutions/6995857 |
 |                                  |        LocalStorage operator       |           4.19          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 |                                  | OpenShift Data Foundation operator |           4.19          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 |                                  |  OpenShift Virtualization operator |           4.19          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
