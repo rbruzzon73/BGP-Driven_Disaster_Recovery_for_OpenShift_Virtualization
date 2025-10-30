@@ -1,4 +1,5 @@
 # BGP-Driven Disaster Recovery for OpenShift Virtualization
+<br>
 
 ## MetalLB Layer 3 (BGP) as a foundational component for Disaster Recovery strategies in OpenShift Virtualization
 
@@ -27,7 +28,7 @@ This approach leads to a significant reduction in the total cost of ownership of
 
    ***
 
-   **Note:** <br>
+   Note: <br>
    DNS GLB will remain relevant in Business Continuity architectures that require an RTO (Total Downtime) of zero.
    In such cases, different sets of IP Address Pools  are assigned to the MetalLB of the OpenShift Virtualization Clusters to grant the scenarios where the VMs operate in an active-active mode (Figure 2).
 
@@ -69,98 +70,140 @@ An alternative approach for managing this complexity is available in this Red Ha
 
 - Implementing user-defined networks (UDNs) in Red Hat OpenShift Virtualization using Virtual Routing and Forwarding (VRF), advertising them via BGP with FRRouting speakers, and injecting learned BGP prefixes back into the VRF creates an adaptable solution that makes entire user-defined networks (UDNs) prefixes, not just LoadBalancer service IPs, directly reachable from the customers network infrastructure This topic, related to user-defined networks (UDNs) exposed via BGP routing protocol, is extensively discussed in this article: [Exposing OpenShift networks using BGP](https://developers.redhat.com/articles/2025/10/23/exposing-openshift-networks-using-bgp#the_benefits_of_bgp_for_openshift_networking)
 
-Figure 4 - Implementation of Network Address Translation to facilitate connectivity to remote subnets.
-<img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure4-Implementation_of_Network_Address_Translation.jpg" width="100%" height="100%">
+   *Figure 4 - Implementation of Network Address Translation to facilitate connectivity to remote subnets.*
+   <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure4-Implementation_of_Network_Address_Translation.jpg" width="100%" height="100%">
 
+<br> 
 
 ## Administration of the MetalLB IPAddressPools and External IP Address advertisement via BGP.
 
-MetalLB can automatically allocate External IP addresses (IPv4 and IPv6), to OpenShift Virtualization services of type LoadBalancer, from any IP address pool where autoAssign is set to true (Figure 5).
+- MetalLB can automatically allocate External IP addresses (IPv4 and IPv6), to OpenShift Virtualization services of type LoadBalancer, from any IP address pool where autoAssign is set to true (Figure 5).
 
-MetalLB offers manual IP address assignment to enhance administrators' control over the allocation of external IP addresses for LoadBalancer services.\
+- MetalLB offers manual IP address assignment to enhance administrators' control over the allocation of external IP addresses for LoadBalancer services.
 Manual allocation of External IP Addresses (Figure 5) can be implemented by means of these configurations :
 
-|                                                        |                                                                                                                                                                              |
-| :----------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| **Setting required for manual External IP allocation** |                                                                                **Description**                                                                               |
-|                   autoAssigne: false                   | Field to be added to the IPAddressPool’s spec planned for manual External IP allocation. The target of this field is preventing any automatic IP assignment from this pool.. |
-|     metallb.io/address-pool: \<IPAddressPool name>     |   Annotation to be added to the OpenShift Virtualization Service and valorized with the name of the IPAddressPool planned as source for the manual External IP Allocation.   |
-|  LoadBalancerIP: \<IP address to be assigned manually> |                  Field to be added to the  OpenShift Virtualization Service and valorized with the IP Address to be manually assigned to the service itself.                 |
+   |                                                        |                                                                                                                                                                              |
+   | :---------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | **Setting required for manual External IP allocation** |                                                                                **Description**                                                                               |
+   |                   autoAssigne: false                   | Field to be added to the IPAddressPool’s spec planned for manual External IP allocation. The target of this field is preventing any automatic IP assignment from this pool.. |
+   |     metallb.io/address-pool: \<IPAddressPool name>     |   Annotation to be added to the OpenShift Virtualization Service and valorized with the name of the IPAddressPool planned as source for the manual External IP Allocation.   |
+   |  LoadBalancerIP: \<IP address to be assigned manually> |                  Field to be added to the  OpenShift Virtualization Service and valorized with the IP Address to be manually assigned to the service itself.                 |
 
-The selection of the IP Address Pool (the source from which the External IP address will be assigned) can be influenced by other factors, as illustrated in this table:
+- The selection of the IP Address Pool (the source from which the External IP address will be assigned) can be influenced by other factors, as illustrated in this table:
 
-|                              |                                                                                                                        |
-| :--------------------------: | :--------------------------------------------------------------------------------------------------------------------: |
-| **serviceAllocation fields** |                                                     **Description**                                                    |
-|      namespaceSelectors      | NamespaceSelectors list of label selectors to select namespace(s) for ip pool, an alternative to using namespace list. |
-|          namespaces          |                            Namespaces list of namespace(s) on which ip pool can be attached.                           |
-|           priority           |                              Priority given for ip pool while ip allocation on a service.                              |
-|       serviceSelectors       |      ServiceSelectors list of label selector to select service(s) for which ip poolcan be used for ip allocation.      |
-
-\
+   |                              |                                                                                                                        |
+   | :-------------------------- | :-------------------------------------------------------------------------------------------------------------------- |
+   | **serviceAllocation fields** |                                                     **Description**                                                    |
+   |      namespaceSelectors      | NamespaceSelectors list of label selectors to select namespace(s) for ip pool, an alternative to using namespace list. |
+   |          namespaces          |                            Namespaces list of namespace(s) on which ip pool can be attached.                           |
+   |           priority           |                              Priority given for ip pool while ip allocation on a service.                              |
+   |       serviceSelectors       |      ServiceSelectors list of label selector to select service(s) for which ip poolcan be used for ip allocation.      |
 
 
-The IPAddressPools must be included within the BGPAdvertisement object to enable the advertisement of Network Layer Reachability Information (NLRI), which consists of the Network Prefix and Prefix Length associated with external IP addresses assigned to LoadBalancer services.
+   *Figure 5 - Service definition with some examples of manual and automatic External IP Address assignment.*
+   <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure5-Service_definition.jpg" width="100%" height="100%">
 
-The purpose of the BGPAdvertisement (Figure 6) is to establish a relationship between the IPAddressPools (specifically which External IP Addresses assigned will be advertised from each IPAddressPools) and the BGP peers (to which the External IP Addresses will be advertised) involved in the BGP sessions with the MetalLB speakers.
 
-This configuration ensures that the External IP Addresses advertised as Network Layer Reachability Information to the BGP peers will be accessible from outside the OpenShift Virtualization cluster.
+- The IPAddressPools must be included within the BGPAdvertisement object to enable the advertisement of Network Layer Reachability Information (NLRI), which consists of the Network Prefix and Prefix Length associated with external IP addresses assigned to LoadBalancer services.
 
-It is important to note that the Network Layer Reachability Information, connected to the External IP Addresses assigned to the LoadBalancer service, will only be advertised if at least one virtual machine is active and connected as an endpoint to the LoadBalancer service.\
-\
-NLRI advertisement can be influenced by these BGAdvertisements fields:
+- The purpose of the BGPAdvertisement (Figure 6) is to establish a relationship between the IPAddressPools (specifically which External IP Addresses assigned will be advertised from each IPAddressPools) and the BGP peers (to which the External IP Addresses will be advertised) involved in the BGP sessions with the MetalLB speakers.
 
-|                            |                                                                                                                                                                                                     |
-| :------------------------: | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| **BGPAdvertisment fields** |                                                                                           **Description**                                                                                           |
-|      aggregationLength     |                               The aggregation-length advertisement option lets you “roll up” the /32s into a larger prefix. Defaults to 32. Works for IPv4 addresses.                               |
-|     aggregationLengthV6    |                              The aggregation-length advertisement option lets you “roll up” the /128s into a larger prefix. Defaults to 128. Works for IPv6 addresses.                              |
-|   ipAddressPoolSelectors   | A selector for the IPAddressPools which would get advertised via this advertisement.If no IPAddressPool is selected by this or by the list, the advertisement is applied to all the IPAddressPools. |
-|       ipAddressPools       |                                                          The list of IPAddressPools to advertise via this advertisement, selected by name.                                                          |
-|       nodeSelectors        |                       NodeSelectors allows to limit the nodes to announce as next hops for the LoadBalancer IP. When empty, all the nodes having  are announced as next hops.                       |
-|           peers            |                         Peers limits the BGP peer to advertise the ips of the selected pools to.When empty, the loadbalancer IP is announced to all the BGPPeers configured.                        |
+- This configuration ensures that the External IP Addresses advertised as Network Layer Reachability Information to the BGP peers will be accessible from outside the OpenShift Virtualization cluster.
 
-In a BGP-driven network topology based on iBGP, where the local ASN matches the peer ASN (Figure 1), the behavior of the BGP protocol can be affected by both the BGP Peer configurations and the BFD Profile, as perceptible in the next two tables.\
-\
-Please note that the BGPPeer Custom Resource (CR) contains the necessary information to establish a BGP session with a single peer.\
+- It is important to note that the Network Layer Reachability Information, connected to the External IP Addresses assigned to the LoadBalancer service, will only be advertised if at least one virtual machine is active and connected as an endpoint to the LoadBalancer service.
+
+- NLRI advertisement can be influenced by these BGAdvertisements fields:
+
+   |                            |                                                                                                                                                                                                     |
+   | :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | **BGPAdvertisment fields** |                                                                                           **Description**                                                                                           |
+   |      aggregationLength     |                               The aggregation-length advertisement option lets you “roll up” the /32s into a larger prefix. Defaults to 32. Works for IPv4 addresses.                               |
+   |     aggregationLengthV6    |                              The aggregation-length advertisement option lets you “roll up” the /128s into a larger prefix. Defaults to 128. Works for IPv6 addresses.                              |
+   |   ipAddressPoolSelectors   | A selector for the IPAddressPools which would get advertised via this advertisement.If no IPAddressPool is selected by this or by the list, the advertisement is applied to all the IPAddressPools. |
+   |       ipAddressPools       |                                                          The list of IPAddressPools to advertise via this advertisement, selected by name.                                                          |
+   |       nodeSelectors        |                       NodeSelectors allows to limit the nodes to announce as next hops for the LoadBalancer IP. When empty, all the nodes having  are announced as next hops.                       |
+   |           peers            |                         Peers limits the BGP peer to advertise the ips of the selected pools to.When empty, the loadbalancer IP is announced to all the BGPPeers configured.                        |
+
+- In a BGP-driven network topology based on iBGP, where the local ASN matches the peer ASN (Figure 1), the behavior of the BGP protocol can be affected by both the BGP Peer configurations and the BFD Profile, as perceptible in the next two tables.\
+
+- Please note that the BGPPeer Custom Resource (CR) contains the necessary information to establish a BGP session with a single peer.\
 To establish sessions with multiple external routers, it is necessary to define multiple BGPPeer CRs, as illustrated in Figure 6.
 
-|                               |                                                                                                                                                        |
-| :---------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------: |
-| **Example of BGPPeer fields** |                                                                     **Description**                                                                    |
-|           bfdProfile          |        The name of the BFD Profile to be used for the BFD session associated with the BGP session. If not set, the BFD session won't be set up.        |
-|     enableGracefulRestart     | EnableGracefulRestart allows BGP Peer to continue to forward data packets along known routes while the routing protocol information is being restored. |
-|         keepaliveTime         |                                                Requested BGP keepalive time, per RFC4271 (default: 60s).                                               |
-|            holdTime           |                                                  Requested BGP hold time, per RFC4271 (default: 180s).                                                 |
-|          connectTime          |                   Requested BGP connect time, controls how long BGP waits between connection attempts to a neighbor (default: 120s).                   |
+   |                               |                                                                                                                                                        |
+   | :--------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | **Example of BGPPeer fields** |                                                                     **Description**                                                                    |
+   |           bfdProfile          |        The name of the BFD Profile to be used for the BFD session associated with the BGP session. If not set, the BFD session won't be set up.        |
+   |     enableGracefulRestart     | EnableGracefulRestart allows BGP Peer to continue to forward data packets along known routes while the routing protocol information is being restored. |
+   |         keepaliveTime         |                                                Requested BGP keepalive time, per RFC4271 (default: 60s).                                               |
+   |            holdTime           |                                                  Requested BGP hold time, per RFC4271 (default: 180s).                                                 |
+   |          connectTime          |                   Requested BGP connect time, controls how long BGP waits between connection attempts to a neighbor (default: 120s).                   |
 
-|                                  |                                                                                                                                                                                                        |
-| :------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| **Example of BFDProfile fields** |                                                                                             **Description**                                                                                            |
-|          receiveInterval         |                                             The minimum interval that this system is capable ofreceiving control packets in milliseconds (default: 300ms).                                             |
-|         transmitInterval         | EnableGracefulRestart allows BGP Peer to continue to forward The minimum transmission interval (less jitter)that this system wants to use to send BFD control packets inMilliseconds (default: 300ms). |
-|         detectMultiplier         |       Configures the detection multiplier to determinepacket loss. The remote transmission interval will be multipliedby this value to determine the connection loss detection timer (default: 3)      |
-|            passiveMode           |                       Mark session as passive: a passive session will notattempt to start the connection and will wait for control packetsfrom a peer before it begins replying.                       |
+   |                                  |                                                                                                                                                                                                        |
+   | :------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | **Example of BFDProfile fields** |                                                                                             **Description**                                                                                            |
+   |          receiveInterval         |                                             The minimum interval that this system is capable ofreceiving control packets in milliseconds (default: 300ms).                                             |
+   |         transmitInterval         | EnableGracefulRestart allows BGP Peer to continue to forward The minimum transmission interval (less jitter)that this system wants to use to send BFD control packets inMilliseconds (default: 300ms). |
+   |         detectMultiplier         |       Configures the detection multiplier to determinepacket loss. The remote transmission interval will be multipliedby this value to determine the connection loss detection timer (default: 3)      |
+   |            passiveMode           |                       Mark session as passive: a passive session will notattempt to start the connection and will wait for control packetsfrom a peer before it begins replying.                       |
 
-\
+<br>
 
-
-
-
-##
+   *Figure 6 - MetalLB in Layer 3 mode (BGB mode) - Object relationships and BGP speaker association with OpenShift Virtualization nodes.*
+   <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure6-MetalLB_in_Layer3-BGP_mode.jpg" width="100%" height="100%">
+   <br>
 
 ## Proof-of-Concept for BGP-Based Disaster Recovery for OpenShift Virtualization.
 
-The infrastructure for this Proof-of-Concept is based on the network topology illustrated in Figure 7 and the configurations detailed in the addendum section located at the end of this document.
+- The infrastructure for this Proof-of-Concept is based on the network topology illustrated in Figure 7 and the configurations detailed in the addendum section located at the end of this document.
 
+    ***
+  
+    <p align="center"> Point of Attention: </p>
+
+    <p align="center"> The process of recovering Virtual Machines from the primary OpenShift Virtualization cluster to the Disaster Recovery (DR) cluster is outside the scope of this Proof of Concept. 
+    The primary focus of this demonstration is to showcase how the BGP protocol can streamline the Disaster Recovery architecture and procedures through the reconvergence capabilities of the routing protocols involved.
+    </p>
+
+    ***
+    
+<br>
 
 ### Initial situation:
 
-The virtual machine rhel8-server is running on hub-worker01.ocp4-hub.test.com, first worker node of the primary OpenShift Virtualization cluster (Figure 7), exposing the HTTP and SSH services via 192.11.1.100/32 External IP address advertised via MetalLB Layer 3 (BGP mode) to the external rtr-frr01-hub router.
+- The virtual machine rhel8-server is running on hub-worker01.ocp4-hub.test.com, first worker node of the primary OpenShift Virtualization cluster (Figure 7), exposing the HTTP and SSH services via 192.11.1.100/32 External IP address advertised via MetalLB Layer 3 (BGP mode) to the external rtr-frr01-hub router.
 
-Based on the MetalLB configuration implemented during the initial setup of the primary OpenShift Virtualization cluster (please refer to the supplemental configuration details provided at the end of this document), the BGP speakers are running on the worker nodes:
+  ~~~
+  [root@hub-ocp-bastion-server ~]# oc get vm
+  NAME           AGE   STATUS    READY
+  rhel8-server   14d   Running   True
 
-Both MalLB BGP speaker are advertising the 192.11.1.100/32 External IP address as Network Layer Reachability Information (NLRI) to the rtr-frr01-hub, as demonstrated in the details below related to the BGP speaker running on hub-worker01.ocp4-hub.test.com:
+  [root@hub-ocp-bastion-server ~]# oc get pod -o wide
+  NAME                               READY   STATUS    RESTARTS   AGE   IP            NODE                             NOMINATED NODE   READINESS GATES
+  virt-launcher-rhel8-server-prl2q   2/2     Running   0          66m   10.128.2.13   hub-worker01.ocp4-hub.test.com   <none>           1/1
+  ~~~
+
+  ~~~
+  [root@hub-ocp-bastion-server ~]# oc get endpoints rhel8-server-01-manual-svc
+  NAME                         ENDPOINTS                       AGE
+  rhel8-server-01-manual-svc   10.128.2.13:80,10.128.2.13:22   3m23
+  ~~~
+
+  ~~~
+  [root@hub-ocp-bastion-server ~]# oc get services
+  NAME                         TYPE           CLUSTER-IP       EXTERNAL-IP    PORT(S)                           AGE
+  headless                     ClusterIP      None             <none>         5434/TCP                          29d
+  rhel8-server-01-manual-svc   LoadBalancer   172.30.145.246   192.11.1.100   22000:31214/TCP,22080:31217/TCP   3m16s
+  ~~~
+
+  *Figure 7 - Environment for Proof-of-Concept on BGP-Based Disaster Recovery for OpenShift Virtualization*
+  <img src="https://github.com/rbruzzon73/BGP-Driven_Disaster_Recovery_for_OpenShift_Virtualization/blob/main/Figure7-Environment_for_Proof-of-Concept.jpg" width="100%" height="100%">
+  <br>
+
+
+
+- Based on the MetalLB configuration implemented during the initial setup of the primary OpenShift Virtualization cluster (please refer to the supplemental configuration details provided at the end of this document), the BGP speakers are running on the worker nodes:
+
+- Both MalLB BGP speaker are advertising the 192.11.1.100/32 External IP address as Network Layer Reachability Information (NLRI) to the rtr-frr01-hub, as demonstrated in the details below related to the BGP speaker running on hub-worker01.ocp4-hub.test.com:
 
 As a result of the Network Layer Reachability Information (NLRI) associated with the external IP address 192.11.1.100/32, which is advertised by the MetalLB BGP speakers, the router rtr-frr01-hub (connected directly to the worker nodes of the Primary OpenShift Virtualization cluster) will recognize two equal-cost paths to reach the prefix 192.11.1.100/32:
 
